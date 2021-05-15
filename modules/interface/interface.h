@@ -20,6 +20,7 @@ InterfacePort;
 //=====[Declarations (prototypes) of public functions]=========================
 
 void interfaceInit();
+void toggleDisplayView();
 void interfaceParseReceivedData(unsigned char* data, int size, InterfacePort port);
 
 //=====[#include guards - end]=================================================
