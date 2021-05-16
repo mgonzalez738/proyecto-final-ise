@@ -4,7 +4,7 @@
 #include "UnbufferedSerial.h"
 
 #include "main.h"
-#include "usbPort.h"
+#include "uartPort.h"
 #include "interface.h"
 #include "activityLeds.h"
 
@@ -14,11 +14,11 @@
 
 typedef enum
 { IDLE = 0,  DEL,  SIZE_MSB,  SIZE_MSB_ESC,  SIZE_LSB,  SIZE_LSB_ESC,  DATA,  DATA_ESC,  CRC_ESC }
-UsbPortReceiveState;
+UartPortReceiveState;
 
 //=====[Declaration and initialization of public global objects]===============
 
-UnbufferedSerial usbPort(USBTX, USBRX, 115200);
+UnbufferedSerial uartPort(PC_12, PD_2, 115200);
 
 //=====[Declaration of external public global variables]=======================
 
@@ -28,29 +28,29 @@ extern EventQueue mainQueue;
 
 //=====[Declaration and initialization of private global variables]============
 
-UsbPortReceiveState usbPortReceiveState;
-unsigned char usbPortReceivedApi[API_MAX_SIZE];
-int usbPortReceivedApiSize;
-int usbPortReceivedApiIndex;
+UartPortReceiveState uartPortReceiveState;
+unsigned char uartPortReceivedApi[API_MAX_SIZE];
+int uartPortReceivedApiSize;
+int uartPortReceivedApiIndex;
 
 //=====[Declarations (prototypes) of private functions]========================
 
-void usbPortReadByte();
-void usbProcessReceivedByte(unsigned char byte);
-unsigned char usbGenerateCRC(unsigned char* data, int size);
-bool usbCheckEscape(unsigned char data);
+void uartPortReadByte();
+void uartProcessReceivedByte(unsigned char byte);
+unsigned char uartGenerateCRC(unsigned char* data, int size);
+bool uartCheckEscape(unsigned char data);
 
 //=====[Implementations of public functions]===================================
 
-void usbPortInit() {
+void uartPortInit() {
 
-    usbPortReceiveState = IDLE;
-    usbPort.set_blocking(false);
-    usbPort.attach(&usbPortReadByte, UnbufferedSerial::RxIrq);
+    uartPortReceiveState = IDLE;
+    uartPort.set_blocking(false);
+    uartPort.attach(&uartPortReadByte, UnbufferedSerial::RxIrq);
 
 }
 
-int usbPortSendData(unsigned char* api, int size)
+int uartPortSendData(unsigned char* api, int size)
 {
     unsigned char transmitFrame[1 + 4 + 2 * API_MAX_SIZE + 2];
     int transmitFrameSize;
@@ -62,20 +62,20 @@ int usbPortSendData(unsigned char* api, int size)
     lengthMsb = (unsigned char)(size / 256);
     lengthLsb = (unsigned char)(size & 0x00FF);
 
-    crc = usbGenerateCRC(api, size);
+    crc = uartGenerateCRC(api, size);
 
     // Genera la trama escapando los caracteres especiales
     i = 0;
     // Delimitador
     transmitFrame[i++] = 0x7E;
     // Size
-    if(usbCheckEscape(lengthMsb)) {
+    if(uartCheckEscape(lengthMsb)) {
         transmitFrame[i++] = 0x7D;
         transmitFrame[i++] = lengthMsb ^ 0x20;
     } else {
         transmitFrame[i++] = lengthMsb;
     }
-    if (usbCheckEscape(lengthLsb)) {
+    if (uartCheckEscape(lengthLsb)) {
         transmitFrame[i++] = 0x7D;
         transmitFrame[i++] = lengthLsb ^ 0x20;
     } else {
@@ -83,7 +83,7 @@ int usbPortSendData(unsigned char* api, int size)
     }
     // Api
     for(j=0; j<size; j++) {
-        if (usbCheckEscape(api[j])) {
+        if (uartCheckEscape(api[j])) {
             transmitFrame[i++] = 0x7D;
             transmitFrame[i++] = api[j] ^ 0x20;
         } else {
@@ -91,7 +91,7 @@ int usbPortSendData(unsigned char* api, int size)
         }
     }
     // Crc
-    if (usbCheckEscape(crc)) {
+    if (uartCheckEscape(crc)) {
          transmitFrame[i++] = 0x7D;
          transmitFrame[i++] = crc ^ 0x20;
      } else {
@@ -99,157 +99,157 @@ int usbPortSendData(unsigned char* api, int size)
      }
 
     // Led
-    blinkUsbLed();
+    blinkUartLed();
 
-    // Envia la trama por usb
-    ret = usbPort.write(transmitFrame, i);
+    // Envia la trama por uart
+    ret = uartPort.write(transmitFrame, i);
 
     return ret;
 }
 
 //=====[Implementations of private functions]==================================
 
-void usbPortReadByte()
+void uartPortReadByte()
 {
 	unsigned char byte;
     // Lee el byte recibido en el contexto de interrupcion
-    usbPort.read(&byte, 1);
+    uartPort.read(&byte, 1);
     // Procesa el byte en el contexto del loop principal
-    mainQueue.call(usbProcessReceivedByte, byte);
+    mainQueue.call(uartProcessReceivedByte, byte);
 }
 
-void usbProcessReceivedByte(unsigned char byte)
+void uartProcessReceivedByte(unsigned char byte)
 {
   // Maquina de estados de recepcion de datos
 
-  switch(usbPortReceiveState) {
+  switch(uartPortReceiveState) {
     
     case IDLE:
       if (byte == 0x7E) {
-        usbPortReceiveState = DEL;
+        uartPortReceiveState = DEL;
       } 
       break;
 
     case DEL:
-      usbPortReceivedApiIndex = 0;
+      uartPortReceivedApiIndex = 0;
       if((byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if(byte == 0x7E) {
-        usbPortReceiveState = DEL;      
+        uartPortReceiveState = DEL;      
       } else if(byte  == 0x7D) {
-        usbPortReceiveState = SIZE_MSB_ESC;
+        uartPortReceiveState = SIZE_MSB_ESC;
       } else {
-        usbPortReceivedApiSize = byte * 256;
-        usbPortReceiveState = SIZE_MSB;
+        uartPortReceivedApiSize = byte * 256;
+        uartPortReceiveState = SIZE_MSB;
       } 
       break;
 
     case SIZE_MSB_ESC:
       if ((byte == 0x7D) || (byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if (byte == 0x7E) {
-        usbPortReceiveState = DEL;
+        uartPortReceiveState = DEL;
       } else {
-        usbPortReceivedApiSize = (byte ^ 0x20) * 256;
-        usbPortReceiveState = SIZE_MSB;
+        uartPortReceivedApiSize = (byte ^ 0x20) * 256;
+        uartPortReceiveState = SIZE_MSB;
       }
       break;
 
     case SIZE_MSB:
       if((byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if(byte == 0x7E) {
-        usbPortReceiveState = DEL;    
+        uartPortReceiveState = DEL;    
       } else if (byte == 0x7D) {
-        usbPortReceiveState = SIZE_LSB_ESC;
+        uartPortReceiveState = SIZE_LSB_ESC;
       } else {
-        usbPortReceivedApiSize += byte;
-        usbPortReceiveState = SIZE_LSB;
+        uartPortReceivedApiSize += byte;
+        uartPortReceiveState = SIZE_LSB;
       }
       break;
 
     case SIZE_LSB_ESC:
      if ((byte == 0x7D) || (byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if (byte == 0x7E) {
-        usbPortReceiveState = DEL;
+        uartPortReceiveState = DEL;
       } else {
-        usbPortReceivedApiSize += byte ^ 0x20;
-        usbPortReceiveState = SIZE_LSB;
+        uartPortReceivedApiSize += byte ^ 0x20;
+        uartPortReceiveState = SIZE_LSB;
       }
       break;
 
     case SIZE_LSB:
       if((byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if(byte == 0x7E) {
-        usbPortReceiveState = DEL; 
-      } else if (usbPortReceivedApiSize > API_MAX_SIZE) { // Evita posible overflow
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = DEL; 
+      } else if (uartPortReceivedApiSize > API_MAX_SIZE) { // Evita posible overflow
+        uartPortReceiveState = IDLE;
       } else if (byte == 0x7D) {
-        usbPortReceiveState = DATA_ESC;
+        uartPortReceiveState = DATA_ESC;
       } else {
-        usbPortReceivedApi[usbPortReceivedApiIndex++] = byte;
-        usbPortReceiveState = DATA;
+        uartPortReceivedApi[uartPortReceivedApiIndex++] = byte;
+        uartPortReceiveState = DATA;
       }
       break;
 
     case DATA_ESC:
       if ((byte == 0x7D) || (byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if (byte == 0x7E) {
-        usbPortReceiveState = DEL;
+        uartPortReceiveState = DEL;
       } else {        
-        usbPortReceivedApi[usbPortReceivedApiIndex++] = byte ^ 0x20;
-        usbPortReceiveState = DATA;
+        uartPortReceivedApi[uartPortReceivedApiIndex++] = byte ^ 0x20;
+        uartPortReceiveState = DATA;
       }
       break;
 
     case DATA:
       if((byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if(byte == 0x7E) {
-        usbPortReceiveState = DEL; 
+        uartPortReceiveState = DEL; 
       } else if (byte == 0x7D) {
-        if (usbPortReceivedApiIndex != usbPortReceivedApiSize) {
-          usbPortReceiveState = DATA_ESC;
+        if (uartPortReceivedApiIndex != uartPortReceivedApiSize) {
+          uartPortReceiveState = DATA_ESC;
         } else {
-          usbPortReceiveState = CRC_ESC;
+          uartPortReceiveState = CRC_ESC;
         }
       } else {
-        if (usbPortReceivedApiIndex != usbPortReceivedApiSize) {
-          usbPortReceivedApi[usbPortReceivedApiIndex++] = byte;
-          usbPortReceiveState = DATA;
+        if (uartPortReceivedApiIndex != uartPortReceivedApiSize) {
+          uartPortReceivedApi[uartPortReceivedApiIndex++] = byte;
+          uartPortReceiveState = DATA;
         } else {
-          uint8_t checkCrc = usbGenerateCRC(usbPortReceivedApi, usbPortReceivedApiIndex);
+          uint8_t checkCrc = uartGenerateCRC(uartPortReceivedApi, uartPortReceivedApiIndex);
           if (checkCrc == byte) {
-            blinkUsbLed();
-            interfaceParseReceivedData(usbPortReceivedApi, usbPortReceivedApiIndex, USB);
+            blinkUartLed();
+            interfaceParseReceivedData(uartPortReceivedApi, uartPortReceivedApiIndex, UART);
           }
-          usbPortReceiveState = IDLE;
+          uartPortReceiveState = IDLE;
         }
       }
       break;
 
     case CRC_ESC:
       if ((byte == 0x7D) || (byte == 0x11) || (byte == 0x13)) {
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       } else if (byte == 0x7E) {
-        usbPortReceiveState = DEL;
+        uartPortReceiveState = DEL;
       } else {
-        uint8_t checkCrc = usbGenerateCRC(usbPortReceivedApi, usbPortReceivedApiIndex);
+        uint8_t checkCrc = uartGenerateCRC(uartPortReceivedApi, uartPortReceivedApiIndex);
         if (checkCrc == (byte ^ 0x20)) {
-          blinkUsbLed();
-          interfaceParseReceivedData(usbPortReceivedApi, usbPortReceivedApiIndex, USB);
+          blinkUartLed();
+          interfaceParseReceivedData(uartPortReceivedApi, uartPortReceivedApiIndex, UART);
         }
-        usbPortReceiveState = IDLE;
+        uartPortReceiveState = IDLE;
       }
       break;
   }
 }
 
 // Devuelve el crc de un array de bytes
-unsigned char usbGenerateCRC(unsigned char* data, int size)
+unsigned char uartGenerateCRC(unsigned char* data, int size)
 {
     unsigned char sum = 0x00;
     int i;
@@ -261,7 +261,7 @@ unsigned char usbGenerateCRC(unsigned char* data, int size)
 }
 
 // Checkea si un byte es un caracter que requiere ser escapado
-bool usbCheckEscape(unsigned char data)
+bool uartCheckEscape(unsigned char data)
 {
     if ((data == 0x7E) || (data == 0x7D) || (data == 0x11) || (data == 0x13))
         return true;

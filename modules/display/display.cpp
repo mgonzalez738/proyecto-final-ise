@@ -135,7 +135,7 @@ void displayInit( displayConnection_t connection )
 	if( display.connection == DISPLAY_CONNECTION_I2C_PCF8574_IO_EXPANDER) {
 		pcf8574.address = PCF8574_I2C_BUS_8BIT_WRITE_ADDRESS;
 		pcf8574.data = 0b00000000;
-		I2C_PCF8574.frequency(100000);
+		I2C_PCF8574.frequency(1000000);
         displayPinWrite( DISPLAY_PIN_A_PCF8574,  ON );
     } 
 	

@@ -5,13 +5,15 @@
 #include "main.h"
 #include "interface.h"
 #include "usbPort.h"
+#include "uartPort.h"
 #include "display.h"
+#include "wind.h"
 
 
 //=====[Declaration of private defines]========================================
 
-#define DISPLAY_INTRO_TIME      5000ms
-#define DISPLAY_REFRESH_PERIOD  1000ms
+#define DISPLAY_INTRO_TIME      3000ms
+#define DISPLAY_REFRESH_PERIOD  500ms
 #define DEBOUNCE_TIME           50ms
 
 //=====[Declaration of private data types]=====================================
@@ -32,6 +34,7 @@ InterruptIn displaySwitchButton(BUTTON1);
 
 extern unsigned char moduleAddress;
 extern EventQueue mainQueue;
+extern WindData wind;
 
 //=====[Declaration and initialization of public global variables]=============
 
@@ -49,6 +52,8 @@ void displayRefresh();
 void UpdateIncView();
 void UpdateImuView();
 void UpdateWindView();
+
+void sendWindData(InterfacePort port);
 
 //=====[Implementations of public functions]===================================
 
@@ -83,6 +88,10 @@ void interfaceParseReceivedData(unsigned char* data, int size, InterfacePort por
         case 2: // Get Data
           
             break;
+        
+        case 3: // Get Wind Data
+            sendWindData(port);
+            break;
 
     }
 }
@@ -91,7 +100,8 @@ void interfaceParseReceivedData(unsigned char* data, int size, InterfacePort por
 
 void displayIntroEnded() {
     // Cambia la vista del display
-    mainQueue.call(displaySwitch,SHOW_INC);
+    displayShow = SHOW_WIND;
+    mainQueue.call(displaySwitch, displayShow);
     // Activa el boton de cambio de vista
     displaySwitchButton.fall(displaySwitchButtonPressed);
     // Inicializa el ticker de refresco
@@ -181,5 +191,36 @@ void UpdateImuView() {
 }
 
 void UpdateWindView() {
+
+    char speedString[5];
+    char directionString[4];
+
+    sprintf(speedString, "%04.1f", wind.speed);
+    displayCharPositionWrite ( 12,1 );
+    displayStringWrite( speedString );
+
+    sprintf(directionString, "%03.0f", wind.direction);
+    displayCharPositionWrite ( 14,2 );
+    displayStringWrite( directionString );
     
+}
+
+void sendWindData(InterfacePort port) {
+
+    unsigned char api[API_MAX_SIZE];
+    int idx = 0;
+    int i;
+
+    api[idx++] = moduleAddress;             // Direccion
+    api[idx++] = 0x03;                      // Funcion
+    for(i=0; i<sizeof(wind.bytes); i++) {   // Datos
+        api[idx++] = wind.bytes[i];
+    }
+    if(port == USB) {
+        usbPortSendData(api, 2 + sizeof(wind.bytes));
+    }
+    if(port == UART) {
+        uartPortSendData(api, 2 + sizeof(wind.bytes));
+    }
+
 }

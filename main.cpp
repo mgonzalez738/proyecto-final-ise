@@ -5,7 +5,9 @@
 #include "main.h"
 #include "interface.h"
 #include "usbPort.h"
+#include "uartPort.h"
 #include "activityLeds.h"
+#include "wind.h"
 
 //=====[Declaration of private defines]=======================================
 
@@ -19,7 +21,7 @@ EventQueue mainQueue;
 
 //=====[Declaration and initialization of public global variables]=============
 
-unsigned char moduleAddress = 0;
+unsigned char moduleAddress = 1;
 
 //=====[Declaration and initialization of private global variables]============
 
@@ -30,9 +32,11 @@ unsigned char moduleAddress = 0;
 int main() {
 
 	// Inicializa modulos
-	usbPortInit();
     interfaceInit();
+    usbPortInit();
+    uartPortInit();
     activityLedsInit();
+    windInit();
      
     // Espera y ejecuta eventos
     mainQueue.dispatch_forever();
