@@ -7,6 +7,7 @@
 #include "usbPort.h"
 #include "uartPort.h"
 #include "activityLeds.h"
+#include "inclinometer.h"
 #include "wind.h"
 
 //=====[Declaration of private defines]=======================================
@@ -36,6 +37,7 @@ int main() {
     usbPortInit();
     uartPortInit();
     activityLedsInit();
+    inclinometerInit();
     windInit();
      
     // Espera y ejecuta eventos

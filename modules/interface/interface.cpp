@@ -8,6 +8,7 @@
 #include "uartPort.h"
 #include "display.h"
 #include "wind.h"
+#include "inclinometer.h"
 
 
 //=====[Declaration of private defines]========================================
@@ -35,6 +36,8 @@ InterruptIn displaySwitchButton(BUTTON1);
 extern unsigned char moduleAddress;
 extern EventQueue mainQueue;
 extern WindData wind;
+extern WindData wind;
+extern InclinometerData inclinometer;
 
 //=====[Declaration and initialization of public global variables]=============
 
@@ -100,7 +103,7 @@ void interfaceParseReceivedData(unsigned char* data, int size, InterfacePort por
 
 void displayIntroEnded() {
     // Cambia la vista del display
-    displayShow = SHOW_WIND;
+    displayShow = SHOW_INC;
     mainQueue.call(displaySwitch, displayShow);
     // Activa el boton de cambio de vista
     displaySwitchButton.fall(displaySwitchButtonPressed);
@@ -183,6 +186,16 @@ void displayRefresh() {
 }
 
 void UpdateIncView() {
+    char incXString[9];
+    char incYString[9];
+
+    sprintf(incXString, "% 7.3f", inclinometer.tiltX);
+    displayCharPositionWrite ( 12,1 );
+    displayStringWrite( incXString );
+
+    sprintf(incYString, "% 7.3f", inclinometer.tiltY);
+    displayCharPositionWrite ( 12,2 );
+    displayStringWrite( incYString );
     
 }
 
@@ -192,14 +205,14 @@ void UpdateImuView() {
 
 void UpdateWindView() {
 
-    char speedString[5];
-    char directionString[4];
+    char speedString[7];
+    char directionString[5];
 
-    sprintf(speedString, "%04.1f", wind.speed);
+    sprintf(speedString, "% 5.1f", wind.speed);
     displayCharPositionWrite ( 12,1 );
     displayStringWrite( speedString );
 
-    sprintf(directionString, "%03.0f", wind.direction);
+    sprintf(directionString, "% 3.0f", wind.direction);
     displayCharPositionWrite ( 14,2 );
     displayStringWrite( directionString );
     
