@@ -55,8 +55,11 @@ void pulseIncrement() {
 
 void windAcquire() {
 
-    // Adquiere veleta
-    wind.direction = VANE_GAIN * vane.read() + VANE_OFFSET;
+    float vaneReading = vane.read();
+    
+    CriticalSectionLock::enable();
+
+    wind.direction = VANE_GAIN * vaneReading + VANE_OFFSET;
     if(wind.direction  >= 360.0) {
         wind.direction  = 0;
     }
@@ -67,4 +70,6 @@ void windAcquire() {
     // Calcula velocidad
     wind.speed = (float)pulseCounter / WIND_ACQ_PERIOD_MS * 1000 * SPEED_GAIN;
     pulseCounter = 0;
+    
+    CriticalSectionLock::disable();
 }

@@ -8,6 +8,7 @@
 #include "uartPort.h"
 #include "activityLeds.h"
 #include "inclinometer.h"
+#include "imu.h"
 #include "wind.h"
 
 //=====[Declaration of private defines]=======================================
@@ -16,7 +17,7 @@
 
 //=====[Declaration and initialization of public global objects]===============
 
-EventQueue mainQueue;
+EventQueue mainQueue(64*EVENTS_EVENT_SIZE);
 
 //=====[Declaration of external public global variables]=======================
 
@@ -38,6 +39,7 @@ int main() {
     uartPortInit();
     activityLedsInit();
     inclinometerInit();
+    imuInit();
     windInit();
      
     // Espera y ejecuta eventos

@@ -9,6 +9,7 @@
 #include "display.h"
 #include "wind.h"
 #include "inclinometer.h"
+#include "imu.h"
 
 
 //=====[Declaration of private defines]========================================
@@ -29,15 +30,16 @@ Timeout displayIntroTimeout;
 Timeout debounceButtonTimeout;
 Ticker displayRefreshTicker;
 
-InterruptIn displaySwitchButton(BUTTON1);
+//InterruptIn displaySwitchButton(BUTTON1);
+InterruptIn displaySwitchButton(PE_15);
 
 //=====[Declaration of external public global variables]=======================
 
 extern unsigned char moduleAddress;
 extern EventQueue mainQueue;
 extern WindData wind;
-extern WindData wind;
 extern InclinometerData inclinometer;
+extern ImuData imu;
 
 //=====[Declaration and initialization of public global variables]=============
 
@@ -56,12 +58,16 @@ void UpdateIncView();
 void UpdateImuView();
 void UpdateWindView();
 
+void sendInclinometerData(InterfacePort port);
 void sendWindData(InterfacePort port);
 
 //=====[Implementations of public functions]===================================
 
 void interfaceInit() {
-    
+
+    // Inicializa boton
+    displaySwitchButton.mode(PullUp);
+
     // Inicializa Display
     displayInit( DISPLAY_CONNECTION_I2C_PCF8574_IO_EXPANDER );  
     displayCharPositionWrite ( 0,0 );
@@ -73,6 +79,7 @@ void interfaceInit() {
     displayCharPositionWrite ( 0,3 );
     displayStringWrite( "Mon. Verticalidad" );
     displayIntroTimeout.attach(displayIntroEnded, DISPLAY_INTRO_TIME);
+
 }
 
 void interfaceParseReceivedData(unsigned char* data, int size, InterfacePort port) {
@@ -88,6 +95,10 @@ void interfaceParseReceivedData(unsigned char* data, int size, InterfacePort por
     // Verifica la funcion
     switch(data[1])
     {
+        case 1: // Get Inclinometer Data
+            sendInclinometerData(port);
+            break;
+
         case 2: // Get Data
           
             break;
@@ -189,18 +200,38 @@ void UpdateIncView() {
     char incXString[9];
     char incYString[9];
 
+    CriticalSectionLock::enable();
     sprintf(incXString, "% 7.3f", inclinometer.tiltX);
+    sprintf(incYString, "% 7.3f", inclinometer.tiltY);
+    CriticalSectionLock::disable();
+    
     displayCharPositionWrite ( 12,1 );
     displayStringWrite( incXString );
-
-    sprintf(incYString, "% 7.3f", inclinometer.tiltY);
+    
     displayCharPositionWrite ( 12,2 );
     displayStringWrite( incYString );
-    
+   
 }
 
 void UpdateImuView() {
+    char imuXString[9];
+    char imuYString[9];
+    char imuZString[9];
+
+    CriticalSectionLock::enable();
+    sprintf(imuXString, "% 7.3f", imu.tiltX);
+    sprintf(imuYString, "% 7.3f", imu.tiltY);
+    sprintf(imuZString, "% 7.3f", imu.tiltZ);
+    CriticalSectionLock::disable();
     
+    displayCharPositionWrite ( 12,1 );
+    displayStringWrite( imuXString );
+    
+    displayCharPositionWrite ( 12,2 );
+    displayStringWrite( imuYString );
+
+    displayCharPositionWrite ( 12,3 );
+    displayStringWrite( imuZString );
 }
 
 void UpdateWindView() {
@@ -208,14 +239,40 @@ void UpdateWindView() {
     char speedString[7];
     char directionString[5];
 
+    CriticalSectionLock::enable();
     sprintf(speedString, "% 5.1f", wind.speed);
+    sprintf(directionString, "% 3.0f", wind.direction);
+    CriticalSectionLock::disable();
+
     displayCharPositionWrite ( 12,1 );
     displayStringWrite( speedString );
 
-    sprintf(directionString, "% 3.0f", wind.direction);
     displayCharPositionWrite ( 14,2 );
     displayStringWrite( directionString );
     
+}
+
+void sendInclinometerData(InterfacePort port) {
+
+    unsigned char api[API_MAX_SIZE];
+    int idx = 0;
+    int i;
+
+    api[idx++] = moduleAddress;             // Direccion
+    api[idx++] = 0x01;                      // Funcion
+    CriticalSectionLock::enable();
+    for(i=0; i<sizeof(inclinometer.bytes); i++) {   // Datos
+        api[idx++] = inclinometer.bytes[i];
+    }
+    CriticalSectionLock::disable();
+
+    if(port == USB) {
+        usbPortSendData(api, 2 + sizeof(inclinometer.bytes));
+    }
+    if(port == UART) {
+        uartPortSendData(api, 2 + sizeof(inclinometer.bytes));
+    }
+
 }
 
 void sendWindData(InterfacePort port) {
@@ -226,9 +283,12 @@ void sendWindData(InterfacePort port) {
 
     api[idx++] = moduleAddress;             // Direccion
     api[idx++] = 0x03;                      // Funcion
+    CriticalSectionLock::enable();
     for(i=0; i<sizeof(wind.bytes); i++) {   // Datos
         api[idx++] = wind.bytes[i];
     }
+    CriticalSectionLock::disable();
+    
     if(port == USB) {
         usbPortSendData(api, 2 + sizeof(wind.bytes));
     }
