@@ -2,8 +2,8 @@
 
 #include "mbed.h"
 
-#include "main.h"
 #include "interface.h"
+#include "configuration.h"
 #include "usbPort.h"
 #include "uartPort.h"
 #include "display.h"
@@ -27,11 +27,12 @@ DisplayShow;
 //=====[Declaration and initialization of public global objects]===============
 
 Timeout displayIntroTimeout;
-Timeout debounceButtonTimeout;
+Timeout debounceDisplaySwitchButtonTimeout;
+Timeout debounceSetInitButtonTimeout;
 Ticker displayRefreshTicker;
 
-//InterruptIn displaySwitchButton(BUTTON1);
-InterruptIn displaySwitchButton(PE_15);
+InterruptIn displaySwitchButton(BUTTON1);
+InterruptIn setInitButton(PE_15);
 
 //=====[Declaration of external public global variables]=======================
 
@@ -40,6 +41,10 @@ extern EventQueue mainQueue;
 extern WindData wind;
 extern InclinometerData inclinometer;
 extern ImuData imu;
+extern ImuCalibration calib;
+extern bool setImuInitial;
+extern bool setInclinometerInitial;
+extern Configuration configuration;
 
 //=====[Declaration and initialization of public global variables]=============
 
@@ -52,21 +57,29 @@ DisplayShow displayShow = SHOW_INC;
 void displayIntroEnded();
 void displaySwitchButtonPressed();
 void displaySwitchButtonDebounced();
+void setInitButtonPressed();
+void setInitButtonDebounced();
 void displaySwitch(DisplayShow ds);
 void displayRefresh();
 void UpdateIncView();
 void UpdateImuView();
 void UpdateWindView();
 
+// Funciones interfaz
 void sendInclinometerData(InterfacePort port);
+void sendImuData(InterfacePort port);
 void sendWindData(InterfacePort port);
+void sendImuCalibrationStatus(InterfacePort port);
+void sendConfiguration(InterfacePort port);
+void receiveConfiguration(unsigned char* data);
+void setInitialSensorValues();
 
 //=====[Implementations of public functions]===================================
 
 void interfaceInit() {
 
-    // Inicializa boton
-    displaySwitchButton.mode(PullUp);
+    // Inicializa boton setInit
+    setInitButton.mode(PullUp);
 
     // Inicializa Display
     displayInit( DISPLAY_CONNECTION_I2C_PCF8574_IO_EXPANDER );  
@@ -100,11 +113,26 @@ void interfaceParseReceivedData(unsigned char* data, int size, InterfacePort por
             break;
 
         case 2: // Get Data
-          
+            sendImuData(port);
             break;
         
         case 3: // Get Wind Data
             sendWindData(port);
+            break;
+
+        case 4: // Get Imu Calibration Status
+            sendImuCalibrationStatus(port);
+            break;
+
+        case 5: // 
+            setInitialSensorValues();
+            break;
+
+        case 6: // Configuration
+            if(size > 2) {
+                receiveConfiguration(data);
+            }
+            sendConfiguration(port);
             break;
 
     }
@@ -118,17 +146,30 @@ void displayIntroEnded() {
     mainQueue.call(displaySwitch, displayShow);
     // Activa el boton de cambio de vista
     displaySwitchButton.fall(displaySwitchButtonPressed);
+    // Activa el boton de inicializacion de sensores
+    setInitButton.fall(setInitButtonPressed);
     // Inicializa el ticker de refresco
     displayRefreshTicker.attach(displayRefresh,DISPLAY_REFRESH_PERIOD);
 }
 
 void displaySwitchButtonPressed() {
-    debounceButtonTimeout.attach(displaySwitchButtonDebounced, DEBOUNCE_TIME);
+    debounceDisplaySwitchButtonTimeout.attach(displaySwitchButtonDebounced, DEBOUNCE_TIME);
 }
 
 void displaySwitchButtonDebounced() {
     if(!displaySwitchButton) {
         mainQueue.call(toggleDisplayView);
+    }
+}
+
+void setInitButtonPressed() {
+    debounceSetInitButtonTimeout.attach(setInitButtonDebounced, DEBOUNCE_TIME);
+}
+
+void setInitButtonDebounced() {
+    if(!setInitButton) {
+        setImuInitial = true;
+        setInclinometerInitial = true;
     }
 }
 
@@ -153,21 +194,21 @@ void displaySwitch(DisplayShow ds) {
         displayCharPositionWrite ( 0,0 );
         displayStringWrite( "Inclinometro" );
         displayCharPositionWrite ( 0,1 );
-        displayStringWrite( "X[grados] =" );
+        displayStringWrite( "X[gr] =" );
         displayCharPositionWrite ( 0,2 );
-        displayStringWrite( "Y[grados] =" );
+        displayStringWrite( "Y[gr] =" );
         return;
     }
     if(ds == SHOW_IMU) {
         displayClear();
         displayCharPositionWrite ( 0,0 );
-        displayStringWrite( "Unidad Inercial" );
+        displayStringWrite( "Inercial" );
         displayCharPositionWrite ( 0,1 );
-        displayStringWrite( "X[grados] =" );
+        displayStringWrite( "X[gr] =" );
         displayCharPositionWrite ( 0,2 );
-        displayStringWrite( "Y[grados] =" );
+        displayStringWrite( "Y[gr] =" );
         displayCharPositionWrite ( 0,3 );
-        displayStringWrite( "Z[grados] =" );
+        displayStringWrite( "Z[gr] =" );
         return;
     }
     if(ds == SHOW_WIND) {
@@ -205,10 +246,10 @@ void UpdateIncView() {
     sprintf(incYString, "% 7.3f", inclinometer.tiltY);
     CriticalSectionLock::disable();
     
-    displayCharPositionWrite ( 12,1 );
+    displayCharPositionWrite ( 13,1 );
     displayStringWrite( incXString );
     
-    displayCharPositionWrite ( 12,2 );
+    displayCharPositionWrite ( 13,2 );
     displayStringWrite( incYString );
    
 }
@@ -217,21 +258,27 @@ void UpdateImuView() {
     char imuXString[9];
     char imuYString[9];
     char imuZString[9];
+    char calibString[10];
 
     CriticalSectionLock::enable();
     sprintf(imuXString, "% 7.3f", imu.tiltX);
     sprintf(imuYString, "% 7.3f", imu.tiltY);
     sprintf(imuZString, "% 7.3f", imu.tiltZ);
+    sprintf(calibString, "[%d %d %d %d]", calib.system, calib.gyroscope, calib.accelerometer, calib.magnetometer);
     CriticalSectionLock::disable();
     
-    displayCharPositionWrite ( 12,1 );
+    displayCharPositionWrite ( 11,0 );
+    displayStringWrite( calibString );
+
+    displayCharPositionWrite ( 13,1 );
     displayStringWrite( imuXString );
     
-    displayCharPositionWrite ( 12,2 );
+    displayCharPositionWrite ( 13,2 );
     displayStringWrite( imuYString );
 
-    displayCharPositionWrite ( 12,3 );
+    displayCharPositionWrite ( 13,3 );
     displayStringWrite( imuZString );
+    
 }
 
 void UpdateWindView() {
@@ -244,10 +291,10 @@ void UpdateWindView() {
     sprintf(directionString, "% 3.0f", wind.direction);
     CriticalSectionLock::disable();
 
-    displayCharPositionWrite ( 12,1 );
+    displayCharPositionWrite ( 15,1 );
     displayStringWrite( speedString );
 
-    displayCharPositionWrite ( 14,2 );
+    displayCharPositionWrite ( 17,2 );
     displayStringWrite( directionString );
     
 }
@@ -275,6 +322,29 @@ void sendInclinometerData(InterfacePort port) {
 
 }
 
+void sendImuData(InterfacePort port) {
+
+    unsigned char api[API_MAX_SIZE];
+    int idx = 0;
+    int i;
+
+    api[idx++] = moduleAddress;             // Direccion
+    api[idx++] = 0x02;                      // Funcion
+    CriticalSectionLock::enable();
+    for(i=0; i<sizeof(imu.bytes); i++) {   // Datos
+        api[idx++] = imu.bytes[i];
+    }
+    CriticalSectionLock::disable();
+
+    if(port == USB) {
+        usbPortSendData(api, 2 + sizeof(imu.bytes));
+    }
+    if(port == UART) {
+        uartPortSendData(api, 2 + sizeof(imu.bytes));
+    }
+
+}
+
 void sendWindData(InterfacePort port) {
 
     unsigned char api[API_MAX_SIZE];
@@ -296,4 +366,65 @@ void sendWindData(InterfacePort port) {
         uartPortSendData(api, 2 + sizeof(wind.bytes));
     }
 
+}
+
+void sendImuCalibrationStatus(InterfacePort port) {
+
+    unsigned char api[API_MAX_SIZE];
+    int idx = 0;
+    int i;
+
+    api[idx++] = moduleAddress;             // Direccion
+    api[idx++] = 0x04;                      // Funcion
+    CriticalSectionLock::enable();
+    for(i=0; i<sizeof(calib.bytes); i++) {   // Datos
+        api[idx++] = calib.bytes[i];
+    }
+    CriticalSectionLock::disable();
+    
+    if(port == USB) {
+        usbPortSendData(api, 2 + sizeof(calib.bytes));
+    }
+    if(port == UART) {
+        uartPortSendData(api, 2 + sizeof(calib.bytes));
+    }
+
+}
+
+void setInitialSensorValues() {
+
+    setImuInitial = true;
+    setInclinometerInitial = true;
+    
+}
+
+void receiveConfiguration(unsigned char* data) {
+
+    CriticalSectionLock::enable();
+    memcpy(&configuration.bytes, &data[2], sizeof(Configuration));
+    CriticalSectionLock::disable();
+    configurationSave();
+    
+}
+
+void sendConfiguration(InterfacePort port) {
+
+    unsigned char api[API_MAX_SIZE];
+    int idx = 0;
+    int i;
+
+    api[idx++] = moduleAddress;             // Direccion
+    api[idx++] = 0x06;                      // Funcion
+    CriticalSectionLock::enable();
+    for(i=0; i<sizeof(configuration.bytes); i++) {   // Datos
+        api[idx++] = configuration.bytes[i];
+    }
+    CriticalSectionLock::disable();
+    
+    if(port == USB) {
+        usbPortSendData(api, 2 + sizeof(calib.bytes));
+    }
+    if(port == UART) {
+        uartPortSendData(api, 2 + sizeof(calib.bytes));
+    }
 }

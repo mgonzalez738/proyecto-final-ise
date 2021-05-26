@@ -3,6 +3,7 @@
 #include "mbed.h"
 
 #include "main.h"
+#include "configuration.h"
 #include "interface.h"
 #include "usbPort.h"
 #include "uartPort.h"
@@ -17,7 +18,7 @@
 
 //=====[Declaration and initialization of public global objects]===============
 
-EventQueue mainQueue(64*EVENTS_EVENT_SIZE);
+EventQueue mainQueue(128*EVENTS_EVENT_SIZE);
 
 //=====[Declaration of external public global variables]=======================
 
@@ -34,6 +35,7 @@ unsigned char moduleAddress = 1;
 int main() {
 
 	// Inicializa modulos
+    configurationInit();
     interfaceInit();
     usbPortInit();
     uartPortInit();

@@ -23,6 +23,7 @@ extern EventQueue mainQueue;
 //=====[Declaration and initialization of public global variables]=============
 
 ImuData imu;
+ImuCalibration calib;
 bool setImuInitial;
 
 //=====[Declaration and initialization of private global variables]============
@@ -43,12 +44,13 @@ void imuInit() {
     imuInitial.tiltY = 0;
     imuInitial.tiltZ = 0;
     
-
-    // Inicializa sensor y adquisicion
+    // Inicializa sensor
     sensor.reset();
     //sensor.check();
-    readImuData();          // Requerido antes de tomar los valores iniciales (primer lectura devuelve 0, revisar)
-    setImuInitial = true;
+    sensor.setmode(OPERATION_MODE_NDOF);
+    setImuInitial = false;
+
+    // Asigna la funcion de adquisición periodica
     imuTicker.attach(imuAcquire, std::chrono::milliseconds(IMU_ACQ_PERIOD_MS));
 
 }
@@ -57,27 +59,39 @@ void imuInit() {
 
 void imuAcquire() {
 
+    // Lee los datos de calibracion y orientacion en el event queue de main
     mainQueue.call(readImuData);
 
 }
 
 void readImuData() {
 
-    sensor.setmode(OPERATION_MODE_NDOF);
+    // Lee los datos de calibracion
     sensor.get_calib();
+    // Lee los datos de orientacion
     sensor.get_angles();
 
+    CriticalSectionLock::enable();
+
+    // Asigna los datos de calibración
+    calib.system = (sensor.calib & 0xC0) >> 6;
+    calib.gyroscope = (sensor.calib & 0x30) >> 4;
+    calib.accelerometer = (sensor.calib & 0x0C) >> 2;
+    calib.magnetometer = (sensor.calib & 0x03);
+
+    // Asigna los datos de orientacion
+    imu.tiltX = sensor.euler.roll - imuInitial.tiltX;
+    imu.tiltY = -sensor.euler.pitch - imuInitial.tiltY;
+    imu.tiltZ = sensor.euler.yaw - imuInitial.tiltZ;
+
+    // Toma los valores actuales como iniciales
     if(setImuInitial) {
-        imuInitial.tiltX = sensor.euler.roll;
-        imuInitial.tiltY = sensor.euler.pitch;
-        imuInitial.tiltZ = sensor.euler.yaw;
+        imuInitial.tiltX += imu.tiltX;
+        imuInitial.tiltY += imu.tiltY;
+        imuInitial.tiltZ += imu.tiltZ;
         setImuInitial = false;
     }
 
-    CriticalSectionLock::enable();
-    imu.tiltX = sensor.euler.roll - imuInitial.tiltX;
-    imu.tiltY = sensor.euler.pitch - imuInitial.tiltY;
-    imu.tiltZ = sensor.euler.yaw - imuInitial.tiltZ;
     CriticalSectionLock::disable();
     
 }

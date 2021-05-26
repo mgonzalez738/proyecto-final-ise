@@ -22,6 +22,18 @@ typedef union IMU_DATA
     unsigned char bytes[12];
 } ImuData;
 
+typedef union IMU_CALIBRATION
+{
+    struct __attribute__((__packed__))
+    {
+        unsigned char system;
+        unsigned char gyroscope;
+        unsigned char accelerometer;  
+        unsigned char magnetometer;
+    };
+    unsigned char bytes[4];
+} ImuCalibration;
+
 //=====[Declarations (prototypes) of public functions]=========================
 
 void imuInit();

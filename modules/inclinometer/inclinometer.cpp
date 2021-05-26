@@ -47,24 +47,25 @@ void inclinometerInit() {
     inclinometerInitial.tiltY = 0;
     inclinometerInitial.tiltZ = 0;
 
+    // Inicializa SPI
     reset = 0;
     cs = 1;
     spi.format(16, 3);
     spi.frequency(500000);
     wait_us(1000);
     reset = 1;
+    setInclinometerInitial = false;
+
+    // Asigna la funcion de adquisición periodica
     incTicker.attach(inclinometerAcquire, std::chrono::milliseconds(INC_ACQ_PERIOD_MS));
-
-    wait_us(1000000);
-    readInclinometerData();
-    setInclinometerInitial = true;
-
+ 
 }
 
 //=====[Implementations of private functions]==================================
 
 void inclinometerAcquire() {
 
+    // Lee los datos de inclinacion en el event queue de main
     mainQueue.call(readInclinometerData);
 
 }
@@ -73,6 +74,7 @@ void readInclinometerData() {
 
     int i;
     
+    // Lee los datos de inclinacion
     for(i=0; i<3; i++) {
         cs = 0;
         wait_us(1);
@@ -81,19 +83,21 @@ void readInclinometerData() {
         cs = 1;
         wait_us(1);
     }
-
-    if(setInclinometerInitial) {
-        inclinometerInitial.tiltX = ((short)(receiveData[1]<<2))*0.025/4;
-        inclinometerInitial.tiltY = ((short)(receiveData[2]<<2))*0.025/4;
-        setInclinometerInitial = false;
-    }
     
-    // Calcula inclinaciones
-
     CriticalSectionLock::enable();
+
+    // Calcula y asigna las inclinaciones 
     inclinometer.tiltX = ((short)(receiveData[1]<<2))*0.025/4 - inclinometerInitial.tiltX;
     inclinometer.tiltY = ((short)(receiveData[2]<<2))*0.025/4 - inclinometerInitial.tiltY;
     inclinometer.tiltZ = 0;
+
+    // Toma los valores actuales como iniciales
+    if(setInclinometerInitial) {
+        inclinometerInitial.tiltX += inclinometer.tiltX;
+        inclinometerInitial.tiltY += inclinometer.tiltY;
+        setInclinometerInitial = false;
+    }
+
     CriticalSectionLock::disable();
     
 }

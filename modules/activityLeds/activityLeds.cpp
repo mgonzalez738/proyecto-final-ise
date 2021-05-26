@@ -43,43 +43,55 @@ void ledUartOff();
 
 void activityLedsInit() {
 
+    // Inicia el led de status periodico
     ledStatusTicker.attach(ledStatusOn, STATUS_LED_PERIOD);
 
 }
 
 void blinkUsbLed() {
+    // Enciende el led
     ledUsbOn();
+    // Asocia el timeout para apagarlo
     ledUsbTimeout.attach(ledUsbOff, USB_LED_ON);
 }
 
 void blinkUartLed() {
+    // Enciende el led
     ledUartOn();
+    // Asocia el timeout para apagarlo
     ledUartTimeout.attach(ledUartOff, UART_LED_ON);
 }
 
 //=====[Implementations of private functions]==================================
 
 void ledStatusOn() {
+    // Enciende el led
     ledStatus = true;
+    // Asocia el timeout para apagarlo
     ledStatusTimeout.attach(ledStatusOff, STATUS_LED_ON);
 }
 
 void ledStatusOff() {
+    // Apaga el led
     ledStatus = false;
 }
 
 void ledUsbOn() {
+    // Enciende el led
     ledUsb = true;
 }
 
 void ledUsbOff() {
+    // Apaga el led
     ledUsb = false;
 }
 
 void ledUartOn() {
+    // Enciende el led
     ledUart = true;
 }
 
 void ledUartOff() {
+    // Apaga el led
     ledUart = false;
 }

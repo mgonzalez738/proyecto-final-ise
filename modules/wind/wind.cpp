@@ -39,8 +39,13 @@ void windAcquire();
 
 void windInit() {
 
+    // Inicializa el contador de pulsos
     pulseCounter = 0;
+
+    // Asigna la adquisicion analogica y calculo de frecuencia periodicos
     windTicker.attach(windAcquire, std::chrono::milliseconds(WIND_ACQ_PERIOD_MS));
+
+    // Asigna la interrupción de flaco ascendente para los pulsos del anemometro
     speed.rise(pulseIncrement);
 
 }
@@ -49,16 +54,19 @@ void windInit() {
 
 void pulseIncrement() {
 
+    // Incrementa e contador de pulsos
     pulseCounter++;
 
 }
 
 void windAcquire() {
 
+    // Adquiere la veleta
     float vaneReading = vane.read();
     
     CriticalSectionLock::enable();
 
+    // Calcula el angulo de la veleta
     wind.direction = VANE_GAIN * vaneReading + VANE_OFFSET;
     if(wind.direction  >= 360.0) {
         wind.direction  = 0;
